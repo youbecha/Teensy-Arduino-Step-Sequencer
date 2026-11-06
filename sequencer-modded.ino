@@ -35,11 +35,10 @@
 /* Modified by Mike, for Teensy 4.1, added an inputs for midi select and for BPM adjust...
  * also to utilize adafruit LED Matrix display
  * the code intially waits for about 5 sec for user to set midi channel, while it displays the midi channel i.e. "M9"
- * then the sequencer starts, note that it uses A0-A7 analog pins for the 8 notes of sequencer steps...
- * So I had to change the SCL and SCA for the LED Matrix I2C to SCL2 and SCA2, which means I needed to edit 
- * Adafruit I2C and Adafruit LED Backpack files, changing &Wire to &Wire2...your mileage may vary
- * pins A14 for BPM input and A15 for midi channel...I didn't want to risk drama, but it is possible maybe to just use one
- * pin for that.
+ * then the sequencer starts. The step pots use A0-A7, which includes the default SDA/SCL pins, so the matrix is on Wire2
+ * (SCL2 pin 24, SDA2 pin 25). Pass &Wire2 to matrix.begin(); the Adafruit libraries stay stock.
+ * A14 sets the MIDI channel for the first 5 seconds, then sets BPM. Fully counterclockwise stops
+ * the sequence and sends note-off.
  * Standard Teensy Midi setup.
  */
 #include <MIDI.h> //you can either use usb for midi output or wire up a midi circuit using TX1 and RX1 on T4.1
@@ -50,7 +49,7 @@
 //#include <Fonts/Font4x7Fixed.h>
 
 //added code to run matrix display...if using segment led then edit as necessary
-//note the Adafruit I2C and LEDBackpack were modified to use Wire2 
+// Matrix is on Wire2. matrix.begin() is given &Wire2 so the Adafruit libraries stay stock.
 Adafruit_8x16matrix matrix = Adafruit_8x16matrix();
 //back to step sequencer code
 
@@ -67,7 +66,7 @@ int midiChannel;
 int midird;
 int numNotes;
 int playingNote;
-int lastNote;
+int lastNote = -1;
 float bpmmath; // used to get a BPM to display
 
 //next section is setup for the midi channel select code
@@ -101,7 +100,7 @@ void setup() {
   Wire2.begin();
 
 //added code to drive matrix LED and the midi channel select code  
-  matrix.begin(0x70);  // pass in the address.  default for led backplane
+  matrix.begin(0x70, &Wire2);  // address 0x70 on SCL2/SDA2, not the default Wire bus
 
   // next section allows a delay for user to set midi channel using MIDI/BPM pot
   start_millis = millis();   // take a snapshot of the current number of
@@ -142,11 +141,40 @@ void setup() {
 }
 
 void loop() {
+  const int STOP_READING = 12;  // fully CCW
+  const int RUN_READING  = 30;  // turn up past this to run
+  static bool sequencerRunning = true;
+
   // MIDI Controllers should discard incoming MIDI messages...was locking up a synth without it
   while (usbMIDI.read()) {
     // read & ignore incoming messages
   }
-  
+
+  int bpmread = analogRead(A14);
+  if (sequencerRunning && bpmread <= STOP_READING) sequencerRunning = false;
+  if (!sequencerRunning && bpmread >= RUN_READING) sequencerRunning = true;
+
+  if (!sequencerRunning) {
+    if (lastNote != -1) {
+      MIDI.sendNoteOff(notes[lastNote], 0, midiChannel);
+      usbMIDI.sendNoteOff(notes[lastNote], 0, midiChannel);
+      lastNote = -1;
+    }
+
+    matrix.setFont(&Picopixel);
+    matrix.setTextSize(1);
+    matrix.setTextWrap(false);
+    matrix.setTextColor(LED_ON);
+    matrix.setRotation(1);
+    matrix.clear();
+    matrix.setCursor(0, 5);
+    matrix.print("OFF");
+    matrix.writeDisplay();
+
+    delay(30);
+    return;
+  }
+
   // Loop through each note in the sequence in turn, playing
   // the note defined by the potentiomer for that point in the sequence.
 
@@ -193,9 +221,10 @@ void loop() {
   // so this next section reads A14 and creates a ms delay as well as a BPM display
   // had to use float and remember to add decimal points so the math would work
 
-  //so modified code to allow a pot to give the delay instead of fixed...it is set to run 1000ms to 150ms delay
-  int bpmread  = analogRead(A14); 
-  int bpm = map(bpmread, 2, 1015, 1000, 150);
+  // A14 sets the step delay. Fully CCW is handled above and never reaches here.
+  // The running range is 1000ms to 150ms per step.
+  int bpm = map(bpmread, RUN_READING, 1023, 1000, 150);
+  bpm = constrain(bpm, 150, 1000);
   float bpmmath = 1.0 / (bpm / 1000.0) * 60.0; //probably a better way to do this, but it is what I came up with
   int bpmshow = bpmmath;
   //Serial.print("a14=");
