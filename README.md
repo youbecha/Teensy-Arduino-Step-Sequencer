@@ -1,8 +1,40 @@
 # Teensy-Arduino-Step-Sequencer
 
-Eight-step MIDI sequencer for a Teensy 4.1, based on [Arduino MIDI Step Sequencer](https://github.com/diyelectromusic/sdemp/tree/main/src/SDEMP/ArduinoMIDIStepSequencer). The original used a fixed MIDI channel and a fixed tempo on an Uno or Nano.
+Eight-step MIDI sequencer for a Teensy 4.1, based on 
+
+https://diyelectromusic.com/2021/01/02/arduino-midi-step-sequencer/
+
+[Arduino MIDI Step Sequencer](https://github.com/diyelectromusic/sdemp/tree/main/src/SDEMP/ArduinoMIDIStepSequencer). 
+
+The original used a fixed MIDI channel and a fixed tempo on an Uno or Nano.
 
 This version adds a startup MIDI-channel knob, a tempo knob, USB MIDI as well as serial MIDI, and an Adafruit 8x16 LED matrix. The matrix shows the MIDI channel at boot, the pitch of the current step while running, and the tempo while that knob is being turned.
+
+-Teensy 4.1 https://www.sparkfun.com/teensy-4-1.html
+
+-10k Analog potentiometers  (the usual sources...the ones I got had knobs)
+
+-Adafruit LED display  https://www.adafruit.com/product/2040
+
+This might have some capabilies unneeded or unwanted, so see info below to make changes.
+
+The analog pot attached to A14 controls MIDI channel on power on, then reverts to BPM control.  The BPM can go from 60 to 4000.  The display can only show 3 numbers, so a bar is added to the top row for every 1000.  Since we are using an analog pot to control that, it isn't that easy to set a specific one, especially at the higher BPM.
+
+When not actively changing BPM with A14 analog pot, the display shows the current note being played.   At 60 BPM you can use this to set the note...at 4000 BPM it is just a mess.
+
+All the documentation below and the edits to the code this week (5 Nov 2026) were done by Cursor AI...everything previous was hand smashed by me...so there are probably some extra commented things.
+
+Recent changes
+
+...the libraries changed and my old code required a manual edit to a library...it was fixed in this code so no editing required.
+
+...As I was testing I kept ending up with a hanging note, so the capability was added to not only stop the sequencer but add a NOTE OFF to the midi broadcast.
+
+...The edits to allow very high BPM was added...with the corresponding display changes.
+
+...I thought I originally had the capability to display the notes while the sequence was played...but that version was not on this github...so that functionality was added to this repo.
+
+(I was testing this on the https://github.com/NickCulbertson/Mini-Teensy-Synth but I had to make an edit on that synth.  MIDIDevice_BigBuffer midi1(myusb); (changed from MIDIDevice midi1(myusb);)  The BigBuffer allows the Teensy in this synth to accept the full midi output of my sequencer...
 
 ## Libraries
 
