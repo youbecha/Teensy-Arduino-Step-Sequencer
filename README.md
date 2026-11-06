@@ -40,3 +40,37 @@ Except during the short BPM display, the matrix prints that pitch as a name such
 The step position is separate from the name. `drawPixel(x, y, LED_ON)` lights one LED on row 7. `x` walks columns 0, 2, 4, 6, 8, 10, 12, and 14 as the eight steps advance. That dot is drawn in every running state, including while the BPM number is on screen.
 
 For the first 5 seconds after boot, before the sequence starts, the same knob sets the MIDI channel and the matrix shows it as `M` plus the channel number.
+
+## Teensy 4.1 pins
+
+Analog names below are the ones in the sketch. The pin number is the Teensy 4.1 digital pin for that analog input.
+
+| Function | Sketch name | Teensy pin |
+| --- | --- | --- |
+| Step 1 pot | A0 | 14 |
+| Step 2 pot | A1 | 15 |
+| Step 3 pot | A2 | 16 |
+| Step 4 pot | A3 | 17 |
+| Step 5 pot | A4 | 18 |
+| Step 6 pot | A5 | 19 |
+| Step 7 pot | A6 | 20 |
+| Step 8 pot | A7 | 21 |
+| MIDI channel at boot, then BPM and stop | A14 | 38 |
+| Serial MIDI out | TX1 | 1 |
+| Serial MIDI in | RX1 | 0 |
+| USB MIDI | USB device port | micro-USB |
+
+Each step pot and the A14 pot connect one end to 3.3 V, the other end to GND, and the wiper to the pin in the table. USB MIDI uses the Teensy USB port and needs no extra pins. Serial MIDI on pins 0 and 1 still needs a standard MIDI output circuit if you use the DIN port.
+
+## LED matrix
+
+The backpack is an Adafruit 8x16 matrix on I2C address `0x70`. Leave the address-select pads in the default position. These are the connections the sketch requires:
+
+| Backpack pin | Teensy pin |
+| --- | --- |
+| SDA | 25 (SDA2) |
+| SCL | 24 (SCL2) |
+| VCC | 3.3 V |
+| GND | GND |
+
+Do not use pins 18 and 19 for this display. Those are the default SDA and SCL pins, and this sketch uses them as step pots A4 and A5.
