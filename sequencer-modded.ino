@@ -187,6 +187,7 @@ void loop() {
   
   // Take the reading for this pot
   int potReading = analogRead (A0+playingNote);
+  int midiNow = -1;
 
   // if the reading is zero (or almost zero), turn off any playing note
   if (potReading < MIN_POT_READING) {
@@ -202,6 +203,7 @@ void loop() {
     // produce an equivalent point in another range of numbers, in this
     // case choose one of the notes in our list.
     int playing = map(potReading, MIN_POT_READING, 1023, 0, numNotes-1);
+    midiNow = notes[playing];
 
     // If we are already playing a note then we need to turn it off first
     if (lastNote != -1) {
@@ -222,25 +224,51 @@ void loop() {
   // had to use float and remember to add decimal points so the math would work
 
   // A14 sets the step delay. Fully CCW is handled above and never reaches here.
-  // The running range is 1000ms to 150ms per step.
-  int bpm = map(bpmread, RUN_READING, 1023, 1000, 150);
-  bpm = constrain(bpm, 150, 1000);
+  // 1000ms is 60 BPM. 15ms is 4000 BPM.
+  int bpm = map(bpmread, RUN_READING, 1023, 1000, 15);
+  bpm = constrain(bpm, 15, 1000);
   float bpmmath = 1.0 / (bpm / 1000.0) * 60.0; //probably a better way to do this, but it is what I came up with
   int bpmshow = bpmmath;
-  //Serial.print("a14=");
-  //Serial.println(bpmshow);
-  //Serial.println(bpmmath);
-  //this dispays bpm on matrix display
-//  matrix.setFont(&Font4x7Fixed);
+
+  // Show BPM only while the A14 knob is being turned. Otherwise show the pitch.
+  static int lastBpmRead = -1;
+  static uint32_t bpmShowUntil = 0;
+  if ((lastBpmRead >= 0) && (abs(bpmread - lastBpmRead) > 6)) {
+    bpmShowUntil = millis() + 1500;
+  }
+  lastBpmRead = bpmread;
+
   matrix.setFont(&Picopixel);
   matrix.setTextSize(1);
-  matrix.setTextWrap(true);  // we dont want text to wrap so it scrolls nicely
+  matrix.setTextWrap(false);
   matrix.setTextColor(LED_ON);
   matrix.setRotation(1);
-    matrix.clear();
-    matrix.setCursor(3,5);
-    matrix.print(bpmshow);
-  //  matrix.drawLine(0,7, 7,7, LED_OFF); 
+  matrix.clear();
+  if ((int32_t)(bpmShowUntil - millis()) > 0) {
+    int thousands = bpmshow / 1000;
+    if (thousands > 4) thousands = 4;
+    int shown = (thousands > 0) ? (bpmshow % 1000) : bpmshow;
+    matrix.setCursor(3, 5);
+    if (thousands > 0) {
+      if (shown < 100) matrix.print('0');
+      if (shown < 10) matrix.print('0');
+    }
+    matrix.print(shown);
+    for (int mark = 0; mark < thousands; mark++) {
+      matrix.drawFastHLine(mark * 4, 0, 3, LED_ON);
+    }
+  } else if (midiNow < 0) {
+    matrix.setCursor(3, 5);
+    matrix.print("--");
+  } else {
+    static const char *noteNames[12] = {
+      "C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"
+    };
+    char noteText[6];
+    snprintf(noteText, sizeof(noteText), "%s%d", noteNames[midiNow % 12], (midiNow / 12) - 1);
+    matrix.setCursor(0, 5);
+    matrix.print(noteText);
+  }
   matrix.drawPixel(x, y, LED_ON);  //uses variables from above to plot a dot at the current step position
     matrix.writeDisplay();
   // the above modified code displays the BPM and a dot below it for each note played...
