@@ -8,7 +8,7 @@ https://diyelectromusic.com/2021/01/02/arduino-midi-step-sequencer/
 
 The original used a fixed MIDI channel and a fixed tempo on an Uno or Nano.
 
-This version adds a startup MIDI-channel knob, a tempo knob, USB MIDI as well as serial MIDI, and an Adafruit 8x16 LED matrix. The matrix shows the MIDI channel at boot, the pitch of the current step while running, and the tempo while that knob is being turned.
+This version adds a startup MIDI-channel knob, a tempo knob, a step button for editing while stopped, USB MIDI as well as serial MIDI, and an Adafruit 8x16 LED matrix. The matrix shows the MIDI channel at boot, the pitch of the current step while running, and the tempo while that knob is being turned. USB enumerates as Teensy-Sequencer.
 
 -Teensy 4.1 https://www.sparkfun.com/teensy-4-1.html
 
@@ -45,7 +45,7 @@ Install these from the Arduino Library Manager. Teensyduino already provides `Wi
 - [Adafruit LED Backpack Library](https://github.com/adafruit/Adafruit_LED_Backpack)
 - [Adafruit BusIO](https://github.com/adafruit/Adafruit_BusIO) (installed with the LED Backpack library)
 
-Board: Teensy 4.1. In the Arduino IDE, set USB Type to a type that includes MIDI, such as Serial + MIDI.
+Board: Teensy 4.1. In the Arduino IDE, set USB Type to a type that includes MIDI, such as MIDI or Serial + MIDI. After uploading, unplug the Teensy and plug it back in. It enumerates as **Teensy-Sequencer**. Note messages are sent with `usbMIDI.sendNoteOn()` and `usbMIDI.sendNoteOff()`, then `usbMIDI.send_now()` so a single note is not left waiting in the USB packet buffer.
 
 The step pots use A0–A7, which includes the default SDA and SCL pins, so the matrix is on Wire2: SCL2 is pin 24 and SDA2 is pin 25, address `0x70`. `matrix.begin(0x70, &Wire2)` selects that bus. The Adafruit libraries do not need to be edited.
 
@@ -53,8 +53,9 @@ The step pots use A0–A7, which includes the default SDA and SCL pins, so the m
 
 `A14` is read at the top of `loop()`.
 
-- Fully counterclockwise, at or below `STOP_READING` (12), stops the sequence, sends note-off, and the matrix shows `OFF`.
-- Turn it back up past `RUN_READING` (30) and the pattern continues from the same step.
+- Fully counterclockwise, at or below `STOP_READING` (12), stops the sequence and sends note-off. The matrix shows `STEP`, and the row 7 dot stays on the step that was just playing.
+- While stopped, pin 2 is the step button (internal pullup, other side to GND). Press and hold it to advance one step, play that pot's note, and show the pitch. Release sends note-off. The dot remains on that step. Turning the parked pot while the button is held updates the sounding note.
+- Turn A14 back up past `RUN_READING` (30) and the pattern continues from that step.
 - Above that stop zone, `map()` turns the reading into a step delay from 1000 ms down to 15 ms. `constrain()` holds it in that range. 1000 ms is 60 BPM. 15 ms is 4000 BPM. One step is one beat: `bpmmath` is `60000 / delay`.
 
 The matrix shows that BPM number only while the knob is moving. A change of more than 6 counts sets `bpmShowUntil` to 1.5 seconds ahead. Until that time, the display prints the tempo at cursor `(3, 5)`.
@@ -73,6 +74,12 @@ The step position is separate from the name. `drawPixel(x, y, LED_ON)` lights on
 
 For the first 5 seconds after boot, before the sequence starts, the same knob sets the MIDI channel and the matrix shows it as `M` plus the channel number.
 
+## Step button
+
+Pin 2 is used only while A14 is fully counterclockwise and the sequence is stopped. The sketch enables the internal pullup, so wire the button between pin 2 and GND. No external resistor is required.
+
+Press and hold the button to advance one step, play that pot's note on USB and serial MIDI, and show the pitch. Release sends note-off. The row 7 dot stays on that step, and the matrix reads `STEP` while the button is up. Hold the button and turn the current step pot to change the sounding pitch. Turn A14 back up and playback continues from that step.
+
 ## Teensy 4.1 pins
 
 Analog names below are the ones in the sketch. The pin number is the Teensy 4.1 digital pin for that analog input.
@@ -88,6 +95,7 @@ Analog names below are the ones in the sketch. The pin number is the Teensy 4.1 
 | Step 7 pot | A6 | 20 |
 | Step 8 pot | A7 | 21 |
 | MIDI channel at boot, then BPM and stop | A14 | 38 |
+| Step button, used while stopped. Other side to GND | digital input | 2 |
 | Serial MIDI out | TX1 | 1 |
 | Serial MIDI in | RX1 | 0 |
 | USB MIDI | USB device port | micro-USB |

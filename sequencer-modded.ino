@@ -55,6 +55,7 @@ Adafruit_8x16matrix matrix = Adafruit_8x16matrix();
 
 #define NUM_POTS 8  // Starting at A0
 #define MIN_POT_READING 4 // Value for the lowest note
+#define STEP_BUTTON_PIN 2 // Held while stopped: step, play, and show that note
 
 // This is required to set up the MIDI library.
 // The default MIDI setup uses the Arduino built-in serial port
@@ -96,6 +97,7 @@ int notes[] = {
 void setup() {
   
   Serial.begin(9600);
+  pinMode(STEP_BUTTON_PIN, INPUT_PULLUP);
 //  we are not using the default SCL SDA ports, so we need to define Wire2
   Wire2.begin();
 
@@ -154,12 +156,86 @@ void loop() {
   if (sequencerRunning && bpmread <= STOP_READING) sequencerRunning = false;
   if (!sequencerRunning && bpmread >= RUN_READING) sequencerRunning = true;
 
-  if (!sequencerRunning) {
-    if (lastNote != -1) {
+  static bool wasRunning = false;
+  static bool stopLatched = false;
+  static bool buttonDown = false;
+  static uint8_t buttonDebounce = 0;
+
+  if (sequencerRunning) {
+    if (stopLatched && (lastNote != -1)) {
       MIDI.sendNoteOff(notes[lastNote], 0, midiChannel);
       usbMIDI.sendNoteOff(notes[lastNote], 0, midiChannel);
+        usbMIDI.send_now();
       lastNote = -1;
     }
+    wasRunning = true;
+    stopLatched = false;
+  }
+
+  if (!sequencerRunning) {
+    if (!stopLatched) {
+      if (lastNote != -1) {
+        MIDI.sendNoteOff(notes[lastNote], 0, midiChannel);
+        usbMIDI.sendNoteOff(notes[lastNote], 0, midiChannel);
+        usbMIDI.send_now();
+        lastNote = -1;
+      }
+      // Leave the dot on the step that was just playing. A later press moves forward.
+      if (wasRunning) {
+        playingNote = (playingNote + NUM_POTS - 1) % NUM_POTS;
+      } else {
+        playingNote = NUM_POTS - 1;
+      }
+      wasRunning = false;
+      stopLatched = true;
+      buttonDown = false;
+      buttonDebounce = 0;
+    }
+
+    bool rawDown = (digitalRead(STEP_BUTTON_PIN) == LOW);
+    if (rawDown == buttonDown) {
+      buttonDebounce = 0;
+    } else if (++buttonDebounce >= 2) {
+      buttonDown = rawDown;
+      buttonDebounce = 0;
+      if (buttonDown) {
+        playingNote++;
+        if (playingNote >= NUM_POTS) {
+          playingNote = 0;
+        }
+      } else if (lastNote != -1) {
+        MIDI.sendNoteOff(notes[lastNote], 0, midiChannel);
+        usbMIDI.sendNoteOff(notes[lastNote], 0, midiChannel);
+        usbMIDI.send_now();
+        lastNote = -1;
+      }
+    }
+
+    int midiNow = -1;
+    int playing = -1;
+    if (buttonDown) {
+      int potReading = analogRead(A0 + playingNote);
+      if (potReading >= MIN_POT_READING) {
+        playing = map(potReading, MIN_POT_READING, 1023, 0, numNotes - 1);
+        midiNow = notes[playing];
+      }
+      if (playing != lastNote) {
+        if (lastNote != -1) {
+          MIDI.sendNoteOff(notes[lastNote], 0, midiChannel);
+          usbMIDI.sendNoteOff(notes[lastNote], 0, midiChannel);
+        usbMIDI.send_now();
+        }
+        if (playing != -1) {
+          MIDI.sendNoteOn(notes[playing], 127, midiChannel);
+          usbMIDI.sendNoteOn(notes[playing], 127, midiChannel);
+        usbMIDI.send_now();
+        }
+        lastNote = playing;
+      }
+    }
+
+    int x = (((playingNote + 1) * 2) - 2);
+    int y = 7;
 
     matrix.setFont(&Picopixel);
     matrix.setTextSize(1);
@@ -167,8 +243,22 @@ void loop() {
     matrix.setTextColor(LED_ON);
     matrix.setRotation(1);
     matrix.clear();
-    matrix.setCursor(0, 5);
-    matrix.print("OFF");
+    if (buttonDown && (midiNow >= 0)) {
+      static const char *noteNames[12] = {
+        "C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"
+      };
+      char noteText[6];
+      snprintf(noteText, sizeof(noteText), "%s%d", noteNames[midiNow % 12], (midiNow / 12) - 1);
+      matrix.setCursor(0, 5);
+      matrix.print(noteText);
+    } else if (buttonDown) {
+      matrix.setCursor(3, 5);
+      matrix.print("--");
+    } else {
+      matrix.setCursor(0, 5);
+      matrix.print("STEP");
+    }
+    matrix.drawPixel(x, y, LED_ON);
     matrix.writeDisplay();
 
     delay(30);
@@ -194,6 +284,7 @@ void loop() {
     if (lastNote != -1) {
       MIDI.sendNoteOff(notes[lastNote], 0, midiChannel);
       usbMIDI.sendNoteOff(notes[lastNote], 0, midiChannel);
+        usbMIDI.send_now();
       lastNote = -1;
       
     }
@@ -209,9 +300,11 @@ void loop() {
     if (lastNote != -1) {
         MIDI.sendNoteOff(notes[lastNote], 0, midiChannel);
         usbMIDI.sendNoteOff(notes[lastNote], 0, midiChannel);
+        usbMIDI.send_now();
     }
     MIDI.sendNoteOn(notes[playing], 127, midiChannel);
     usbMIDI.sendNoteOn(notes[playing], 127, midiChannel);
+        usbMIDI.send_now();
     lastNote = playing;
     
  // Serial.print("playing= ");
